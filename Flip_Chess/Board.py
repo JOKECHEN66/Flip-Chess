@@ -13,6 +13,10 @@ class Board:
         self._board[3][4], self._board[4][3] = 'O', 'O'
         # 判断是否可以产生翻转的八个方向
         self._directions = [[-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1]]
+        
+    def show_board(self):
+        # 在UI中打印棋盘信息
+        pass
 
     def display_board(self):
         # 在控制台上打印棋盘
