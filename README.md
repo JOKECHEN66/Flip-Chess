@@ -2,9 +2,9 @@
 Use MCTS to achieve a flip chess game
 
 ## 代码结构
-|root  
-|-Board.py: 封装棋盘信息和比赛流程  
-|-MCTS.py: 封装AI行为（蒙特卡洛树搜索）和玩家行为  
+|-root  
+|--Board.py: 封装棋盘信息和比赛流程  
+|--MCTS.py: 封装AI行为（蒙特卡洛树搜索）和玩家行为  
 
 ## UI需求
 Board.py: 在Game中需要将比赛信息输出至UI中  
