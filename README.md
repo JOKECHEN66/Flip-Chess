@@ -1,5 +1,5 @@
 # Flip-Chess
-Use MSTC to achieve a flip chess game
+Use MCTS to achieve a flip chess game
 
 ## 代码结构
 |
