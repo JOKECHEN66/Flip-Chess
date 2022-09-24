@@ -2,10 +2,8 @@
 
 import math
 import random
-import time
-import numpy
 
-from Board import Board, Game
+from .Board import Game
 from copy import deepcopy
 
 EMPTY = 0

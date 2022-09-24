@@ -1,4 +1,6 @@
 # encoding: utf-8
+from email.policy import default
+from select import select
 from Flip_Chess.Board import Board
 
 WIDTH = 540
@@ -17,6 +19,22 @@ import logging
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QIcon, QPalette, QPainter
+from Flip_Chess.MCTS import Monte_Carlo_Tree_Search
+
+
+class MCTS_AI(QtCore.QThread):
+    finishSignal = QtCore.pyqtSignal(int, int)
+
+    def __init__(self, chessboard, parent=None):
+        super(MCTS_AI, self).__init__(parent)
+        self.chessboard = chessboard
+
+    def run(self):
+        self.MCTS = Monte_Carlo_Tree_Search("MCTS_AI", WHITE)
+        strategy = self.MCTS(self.chessboard)
+        i, j = strategy[0], strategy[1]
+        logging.debug(f"MCTS_AI put piece at {i} {j}")
+        self.finishSignal.emit(i, j)
 
 
 class LaBel(QLabel):
@@ -28,9 +46,10 @@ class LaBel(QLabel):
         e.ignore()
 
 
-class GoBang(QWidget):
-    def __init__(self):
+class FlipChess(QWidget):
+    def __init__(self, args):
         super().__init__()
+        self.args = args
         self.initUI()
 
     def initUI(self):
@@ -79,29 +98,53 @@ class GoBang(QWidget):
         self.show()
         self.update_UI_chessboard()
 
-    # def paintEvent(self, event):
-    #     qp = QPainter()
-    #     qp.begin(self)
-    #     self.drawLines(qp)
-    #     qp.end()
+    def paintEvent(self, event):
+        qp = QPainter()
+        qp.begin(self)
+        self.drawLines(qp)
+        qp.end()
 
     def mouseMoveEvent(self, e):  # 黑色棋子随鼠标移动
         self.mouse_point.move(e.x() - 32, e.y() - 32)
 
     def mousePressEvent(self, e):  # 玩家下棋
+        logging.debug("Get mouse press event")
         if e.button() == Qt.LeftButton and self.ai_down == True:
             x, y = e.x(), e.y()
             i, j = self.coordinate_transform_pixel2map(x, y)
             if not i is None and not j is None:
-                if self.chessboard.get_xy_on_logic_state(i, j) == EMPTY:
+                piece_state = self.chessboard.get_xy_on_logic_state(i, j)
+                logging.debug(f"Pieces at {i} {j} is {piece_state}")
+                if piece_state == EMPTY:
                     # 棋子落在空白处才进行反应，传入到chessboard进行处理，然后刷新GUI棋盘
-                    if self.chessboard.put_piece(i, j, self.piece_now) == 0:
+                    can_put_piece = self.chessboard.put_piece(i, j, self.piece_now)
+                    logging.debug(f"can_put_piece = {can_put_piece}")
+                    print(self.chessboard.get_logic_board())
+                    if can_put_piece == 0:
                         self.update_UI_chessboard()
                         # 落子完毕后，当前棋子取反
                         self.piece_now = BLACK if self.piece_now == WHITE else WHITE
                         self.mouse_point.setPixmap(
                             self.black if self.piece_now == BLACK else self.white
                         )
+                        if self.args.mode == "PVE":
+                            # PVE时玩家先下，MCTS_AI是white
+                            self.ai_down = False
+                            self.AI = MCTS_AI(self.chessboard)
+                            logging.debug("AI start")
+                            self.AI.finishSignal.connect(self.AI_draw)
+                            self.AI.start()
+
+    def AI_draw(self, i, j):
+        # AI做出决策后，显示AI落子，get logic chessboard and update UI chessboard
+        self.chessboard.put_piece(i, j, WHITE)
+        self.update_UI_chessboard()
+        self.x, self.y = self.coordinate_transform_map2pixel(i, j)
+        self.ai_down = True
+        self.update()
+        self.mouse_point.setPixmap(self.black)
+        self.piece_now = BLACK
+        logging.debug("AI's turn is over")
 
     def update_UI_chessboard(self):
         logic_chessboard = self.chessboard.get_logic_board()
@@ -126,12 +169,13 @@ class GoBang(QWidget):
         logging.info("Updated UI_chessboard")
 
     def drawLines(self, qp):  # 指示AI当前下的棋子
-        if self.step != 0:
-            pen = QtGui.QPen(QtCore.Qt.black, 2, QtCore.Qt.SolidLine)
-            qp.setPen(pen)
-            qp.drawLine(self.x - 5, self.y - 5, self.x + 3, self.y + 3)
-            qp.drawLine(self.x + 3, self.y, self.x + 3, self.y + 3)
-            qp.drawLine(self.x, self.y + 3, self.x + 3, self.y + 3)
+        pen = QtGui.QPen(QtCore.Qt.green, 4, QtCore.Qt.SolidLine)
+        qp.setPen(pen)
+        x = int(self.x)
+        y = int(self.y)
+        qp.drawLine(x - 10, y - 10, x + 6, y + 6)
+        qp.drawLine(x + 6, y, x + 6, y + 6)
+        qp.drawLine(x, y + 6, x + 6, y + 6)
 
     def coordinate_transform_map2pixel(self, i, j):
         # 从 chessMap 里的逻辑坐标到 UI 上的绘制坐标的转换
@@ -176,6 +220,12 @@ class GoBang(QWidget):
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", type=str, choices=["PVP", "PVE"], default="PVP")
+    parser.add_argument("--MCTS_SCALAR", type=int)
+    args = parser.parse_args()
     app = QApplication(sys.argv)
-    ex = GoBang()
+    ex = FlipChess(args)
     sys.exit(app.exec_())
