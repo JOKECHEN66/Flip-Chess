@@ -8,6 +8,10 @@ import numpy
 from Board import Board, Game
 from copy import deepcopy
 
+EMPTY = 0
+BLACK = 1
+WHITE = 2
+
 
 class Node:
     def __init__(self, state, parent=None, strategy=None, chess_piece=None):
@@ -57,7 +61,7 @@ class Monte_Carlo_Tree_Search:
         :return: Node, 某一子节点
         '''
         count = 0
-        while node.state.judge_end() == '·' and count < self.MAX_DEPTH:
+        while node.state.judge_end() == EMPTY and count < self.MAX_DEPTH:
             if not node.full_expand():
                 return self.expand(node)
             else:
@@ -85,7 +89,7 @@ class Monte_Carlo_Tree_Search:
         new_state = deepcopy(node.state)
         new_state.drop(strategy[0], strategy[1], node.chess_piece)
 
-        chess_piece = 'O' if node.chess_piece == 'X' else 'X'
+        chess_piece = WHITE if node.chess_piece == BLACK else BLACK
         node.add_child(new_state, strategy, chess_piece)
 
         return node.children[-1]
@@ -99,17 +103,17 @@ class Monte_Carlo_Tree_Search:
         board = deepcopy(node.state)
         chess_piece = node.chess_piece
         count = 0
-        while board.judge_end() == '·':
+        while board.judge_end() == EMPTY:
             strategy_list = node.state.judge_all_drops(chess_piece)
             if len(strategy_list) == 0:
-                chess_piece = 'O' if chess_piece == 'X' else 'X'
+                chess_piece = WHITE if chess_piece == BLACK else BLACK
                 strategy_list = node.state.judge_all_drops(chess_piece)
                 if len(strategy_list) == 0:
                     break
 
             strategy = random.choice(strategy_list)
             board.drop(strategy[0], strategy[1], chess_piece)
-            chess_piece = 'O' if chess_piece == 'X' else 'X'
+            chess_piece = WHITE if chess_piece == BLACK else BLACK
 
             count += 1
             if count > self.MAX_DEPTH:
@@ -118,7 +122,7 @@ class Monte_Carlo_Tree_Search:
         winner, d_value = board.calculate_winner()
         '''---------WARNING---------'''
         # might be buggy here
-        if winner == '·':
+        if winner == EMPTY:
             reward = 0
         elif winner == chess_piece:
             reward = -(10 + d_value)
@@ -213,7 +217,7 @@ class Human_Player:
 
 
 if __name__ == '__main__':
-    p1 = Monte_Carlo_Tree_Search('AI_1', 'X')
-    p2 = Monte_Carlo_Tree_Search('AI_2', 'O')
+    p1 = Monte_Carlo_Tree_Search('AI_1', BLACK)
+    p2 = Monte_Carlo_Tree_Search('AI_2', WHITE)
     game = Game(p1, p2)
     game.play_game()

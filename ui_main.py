@@ -13,6 +13,7 @@ WHITE = 2
 
 import sys
 from PyQt5 import QtCore, QtGui
+import logging
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QIcon, QPalette, QPainter
@@ -33,35 +34,35 @@ class GoBang(QWidget):
         self.initUI()
 
     def initUI(self):
+        LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+        self.chessboard = Board()
 
-        self.chessboard = Board()  # 棋盘类
-
-        palette1 = QPalette()  # 设置棋盘背景
+        palette1 = QPalette()
         palette1.setBrush(
             self.backgroundRole(),
             QtGui.QBrush(QtGui.QPixmap("img/chessboard.jpg").scaledToWidth(540)),
         )
         self.setPalette(palette1)
-        self.setCursor(Qt.PointingHandCursor)  # 鼠标变成手指形状
+        self.setCursor(Qt.PointingHandCursor)
 
         self.resize(WIDTH, HEIGHT)  # 固定大小 540*540
         self.setMinimumSize(QtCore.QSize(WIDTH, HEIGHT))
         self.setMaximumSize(QtCore.QSize(WIDTH, HEIGHT))
 
-        self.setWindowTitle("FlipChess")  # 窗口名称
-        self.setWindowIcon(QIcon("img/black.png"))  # 窗口图标
+        self.setWindowTitle("FlipChess")
+        self.setWindowIcon(QIcon("img/black.png"))
 
         self.black = QPixmap("img/black.png")
         self.white = QPixmap("img/white.png")
 
         self.piece_now = BLACK  # 黑棋先行
         self.my_turn = True  # 玩家先行
-        self.step = 0  # 步数
         self.x, self.y = 1000, 1000
 
         self.mouse_point = LaBel(self)  # 将鼠标图片改为棋子
         self.mouse_point.setScaledContents(True)
-        self.mouse_point.setPixmap(self.black)  # 加载黑棋
+        self.mouse_point.setPixmap(self.black)
         self.mouse_point.setGeometry(270, 270, PIECE, PIECE)
         self.pieces = [LaBel(self) for i in range(64)]  # 新建棋子标签，准备在棋盘上绘制棋子
         for piece in self.pieces:
@@ -69,21 +70,20 @@ class GoBang(QWidget):
             piece.setScaledContents(True)  # 图片大小根据标签大小可变
 
         self.pieces_state = [EMPTY for _ in range(64)]
-        self.pieces_state = self.chessboard.get_logic_board()
 
         self.mouse_point.raise_()  # 鼠标始终在最上层
         self.ai_down = (
             True  # AI已下棋，主要是为了加锁，当值是False的时候说明AI正在思考，这时候玩家鼠标点击失效，要忽略掉 mousePressEvent
         )
-
         self.setMouseTracking(True)
         self.show()
+        self.update_UI_chessboard()
 
-    def paintEvent(self, event):  # 画出指示箭头
-        qp = QPainter()
-        qp.begin(self)
-        self.drawLines(qp)
-        qp.end()
+    # def paintEvent(self, event):
+    #     qp = QPainter()
+    #     qp.begin(self)
+    #     self.drawLines(qp)
+    #     qp.end()
 
     def mouseMoveEvent(self, e):  # 黑色棋子随鼠标移动
         self.mouse_point.move(e.x() - 32, e.y() - 32)
@@ -95,29 +95,35 @@ class GoBang(QWidget):
             if not i is None and not j is None:
                 if self.chessboard.get_xy_on_logic_state(i, j) == EMPTY:
                     # 棋子落在空白处才进行反应，传入到chessboard进行处理，然后刷新GUI棋盘
-                    self.chessboard.put_piece(i, j, self.piece_now)
-                    self.update_UI_chessboard()
-                    # 落子完毕后，当前棋子取反
-                    self.piece_now = BLACK if self.piece_now == WHITE else BLACK
+                    if self.chessboard.put_piece(i, j, self.piece_now) == 0:
+                        self.update_UI_chessboard()
+                        # 落子完毕后，当前棋子取反
+                        self.piece_now = BLACK if self.piece_now == WHITE else WHITE
+                        self.mouse_point.setPixmap(
+                            self.black if self.piece_now == BLACK else self.white
+                        )
 
     def update_UI_chessboard(self):
         logic_chessboard = self.chessboard.get_logic_board()
-        for i in len(logic_chessboard):
-            for j in len(logic_chessboard[0]):
-                piece_index = 8 * i + j
-                if (
-                    self.pieces_state[piece_index]
-                    != self.chessboard.get_xy_on_logic_state[piece_index]
-                ):
-                    # 如果当前棋子非空，将棋子clear
-                    if self.pieces_state[piece_index] != EMPTY:
-                        self.pieces[piece_index].clear()
-                    if logic_chessboard[piece_index] == BLACK:
-                        self.pieces[piece_index].setPixmap(self.black)
-                    else:
-                        self.pieces[piece_index].setPixmap(self.white)
-                    x, y = self.coordinate_transform_map2pixel(i, j)
-                    self.pieces[piece_index].setGeometry(int(x), int(y), PIECE, PIECE)
+        for piece_index in range(64):
+            i, j = int(piece_index / 8), piece_index % 8
+            if self.pieces_state[piece_index] != self.chessboard.get_xy_on_logic_state(
+                i, j
+            ):
+                # 如果当前棋子非空，将棋子clear
+                logging.debug(f"piece_index {piece_index} change")
+                if self.pieces_state[piece_index] != EMPTY:
+                    self.pieces[piece_index].clear()
+                # 棋子放图片
+                if logic_chessboard[piece_index] == BLACK:
+                    self.pieces[piece_index].setPixmap(self.black)
+                    self.pieces_state[piece_index] = BLACK
+                else:
+                    self.pieces[piece_index].setPixmap(self.white)
+                    self.pieces_state[piece_index] = WHITE
+                x, y = self.coordinate_transform_map2pixel(i, j)
+                self.pieces[piece_index].setGeometry(int(x), int(y), PIECE, PIECE)
+        logging.info("Updated UI_chessboard")
 
     def drawLines(self, qp):  # 指示AI当前下的棋子
         if self.step != 0:
