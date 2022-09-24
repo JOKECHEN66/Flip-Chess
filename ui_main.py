@@ -1,6 +1,7 @@
 # encoding: utf-8
 from email.policy import default
 from select import select
+from turtle import update
 from Flip_Chess.Board import Board
 
 WIDTH = 540
@@ -76,7 +77,6 @@ class FlipChess(QWidget):
         self.white = QPixmap("img/white.png")
 
         self.piece_now = BLACK  # 黑棋先行
-        self.my_turn = True  # 玩家先行
         self.x, self.y = 1000, 1000
 
         self.mouse_point = LaBel(self)  # 将鼠标图片改为棋子
@@ -108,18 +108,15 @@ class FlipChess(QWidget):
         self.mouse_point.move(e.x() - 32, e.y() - 32)
 
     def mousePressEvent(self, e):  # 玩家下棋
-        logging.debug("Get mouse press event")
         if e.button() == Qt.LeftButton and self.ai_down == True:
             x, y = e.x(), e.y()
             i, j = self.coordinate_transform_pixel2map(x, y)
             if not i is None and not j is None:
                 piece_state = self.chessboard.get_xy_on_logic_state(i, j)
-                logging.debug(f"Pieces at {i} {j} is {piece_state}")
                 if piece_state == EMPTY:
                     # 棋子落在空白处才进行反应，传入到chessboard进行处理，然后刷新GUI棋盘
                     can_put_piece = self.chessboard.put_piece(i, j, self.piece_now)
-                    logging.debug(f"can_put_piece = {can_put_piece}")
-                    print(self.chessboard.get_logic_board())
+                    self.judge_winner()
                     if can_put_piece == 0:
                         self.update_UI_chessboard()
                         # 落子完毕后，当前棋子取反
@@ -131,20 +128,19 @@ class FlipChess(QWidget):
                             # PVE时玩家先下，MCTS_AI是white
                             self.ai_down = False
                             self.AI = MCTS_AI(self.chessboard)
-                            logging.debug("AI start")
                             self.AI.finishSignal.connect(self.AI_draw)
                             self.AI.start()
 
     def AI_draw(self, i, j):
         # AI做出决策后，显示AI落子，get logic chessboard and update UI chessboard
         self.chessboard.put_piece(i, j, WHITE)
-        self.update_UI_chessboard()
+        self.judge_winner()
         self.x, self.y = self.coordinate_transform_map2pixel(i, j)
         self.ai_down = True
         self.update()
+        self.update_UI_chessboard()
         self.mouse_point.setPixmap(self.black)
         self.piece_now = BLACK
-        logging.debug("AI's turn is over")
 
     def update_UI_chessboard(self):
         logic_chessboard = self.chessboard.get_logic_board()
@@ -166,7 +162,7 @@ class FlipChess(QWidget):
                     self.pieces_state[piece_index] = WHITE
                 x, y = self.coordinate_transform_map2pixel(i, j)
                 self.pieces[piece_index].setGeometry(int(x), int(y), PIECE, PIECE)
-        logging.info("Updated UI_chessboard")
+        self.judge_winner()
 
     def drawLines(self, qp):  # 指示AI当前下的棋子
         pen = QtGui.QPen(QtCore.Qt.green, 4, QtCore.Qt.SolidLine)
@@ -190,22 +186,29 @@ class FlipChess(QWidget):
         else:
             return i, j
 
+    def judge_winner(self):
+        winner = self.chessboard.judge_end()
+        logging.info(f"Winner is {winner}")
+        if winner != EMPTY:
+            self.gameover(winner)
+
     def gameover(self, winner):
+        logging.info("Game over")
         if winner == BLACK:
             reply = QMessageBox.question(
                 self,
-                "You Win!",
+                "Winner is black player!",
                 "Continue?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.No
             )
         else:
             reply = QMessageBox.question(
                 self,
-                "You Lost!",
+                "Winner is white player",
                 "Continue?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.No
             )
 
         if reply == QMessageBox.Yes:  # 复位
@@ -214,6 +217,7 @@ class FlipChess(QWidget):
             for piece in self.pieces:
                 piece.clear()
             self.chessboard.reset()
+            self.update_UI_chessboard()
             self.update()
         else:
             self.close()
