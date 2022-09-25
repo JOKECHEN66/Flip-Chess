@@ -197,10 +197,10 @@ class FlipChess(QWidget):
         if winner == BLACK:
             reply = QMessageBox.question(
                 self,
-                "Winner is black player!",
-                "Continue?",
+                "Flip chess",
+                "Winner is black player!\nContinue?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.No,
             )
         else:
             reply = QMessageBox.question(
@@ -208,16 +208,18 @@ class FlipChess(QWidget):
                 "Winner is white player",
                 "Continue?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.No,
             )
 
         if reply == QMessageBox.Yes:  # 复位
-            self.piece_now = BLACK
-            self.mouse_point.setPixmap(self.black)
             for piece in self.pieces:
                 piece.clear()
-            self.chessboard.reset()
+            self.chessboard = Board()
+            self.pieces_state = [EMPTY for _ in range(64)]
             self.update_UI_chessboard()
+            self.ai_down = True
+            self.piece_now = BLACK
+            self.mouse_point.setPixmap(self.black)
             self.update()
         else:
             self.close()
