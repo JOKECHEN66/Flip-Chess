@@ -7,9 +7,8 @@ from Flip_Chess.Board import Board
 
 WIDTH = 540
 HEIGHT = 640
-MARGIN = 30
-GRID = (WIDTH - 2 * MARGIN) / (8 - 1)
-PIECE = 60
+GRID = WIDTH / 8
+PIECE = 65
 EMPTY = 0
 BLACK = 1
 WHITE = 2
@@ -37,7 +36,9 @@ class MCTS_AI(QtCore.QThread):
         self.WEIGHT = WEIGHT
 
     def run(self):
-        self.MCTS = Monte_Carlo_Tree_Search("MCTS_AI", WHITE, self.SCALAR, self.MAX_DEPTH, self.WEIGHT)
+        self.MCTS = Monte_Carlo_Tree_Search(
+            "MCTS_AI", WHITE, self.SCALAR, self.MAX_DEPTH, self.WEIGHT
+        )
         strategy, total_time = self.MCTS(self.chessboard)
         i, j = strategy[0], strategy[1]
         logging.debug(f"MCTS_AI put piece at {i} {j}")
@@ -79,7 +80,7 @@ class FlipChess(QWidget):
         self.setMinimumSize(QtCore.QSize(WIDTH, HEIGHT))
         self.setMaximumSize(QtCore.QSize(WIDTH, HEIGHT))
 
-        self.text = QTextEdit('Waiting AI to move...', self)
+        self.text = QTextEdit("Waiting AI to move...", self)
         self.text.resize(540, 100)
         self.text.move(0, 541)
         self.text.setReadOnly(True)
@@ -128,7 +129,7 @@ class FlipChess(QWidget):
                     # 棋子落在空白处才进行反应，传入到chessboard进行处理，然后刷新GUI棋盘
                     can_put_piece = self.chessboard.put_piece(i, j, self.piece_now)
                     if can_put_piece == -1:
-                        QMessageBox.warning(self, 'WARNING', 'Invalid Place to Put!')
+                        QMessageBox.warning(self, "WARNING", "Invalid Place to Put!")
                         if self.piece_now == BLACK:
                             self.black_count += 1
                             count = self.black_count
@@ -155,13 +156,18 @@ class FlipChess(QWidget):
                         if self.args.mode == "PVE":
                             # PVE时玩家先下，MCTS_AI是white
                             self.ai_down = False
-                            self.AI = MCTS_AI(self.chessboard, self.args.SCALAR, self.args.MAX_DEPTH, self.args.WEIGHT)
+                            self.AI = MCTS_AI(
+                                self.chessboard,
+                                self.args.SCALAR,
+                                self.args.MAX_DEPTH,
+                                self.args.WEIGHT,
+                            )
                             self.AI.finishSignal.connect(self.AI_draw)
                             self.AI.start()
                         self.judge_winner()
         elif e.button() == Qt.RightButton and self.ai_down == True:
             if self.chessboard.judge_all_drops(self.piece_now) == []:
-                QMessageBox.information(self, 'INFORMATION', 'You Skip this Turn...')
+                QMessageBox.information(self, "INFORMATION", "You Skip this Turn...")
                 self.piece_now = BLACK if self.piece_now == WHITE else WHITE
                 self.mouse_point.setPixmap(
                     self.black if self.piece_now == BLACK else self.white
@@ -169,20 +175,31 @@ class FlipChess(QWidget):
                 if self.args.mode == "PVE":
                     # PVE时玩家先下，MCTS_AI是white
                     self.ai_down = False
-                    self.AI = MCTS_AI(self.chessboard, self.args.SCALAR, self.args.MAX_DEPTH, self.args.WEIGHT)
+                    self.AI = MCTS_AI(
+                        self.chessboard,
+                        self.args.SCALAR,
+                        self.args.MAX_DEPTH,
+                        self.args.WEIGHT,
+                    )
                     self.AI.finishSignal.connect(self.AI_draw)
                     self.AI.start()
                 self.judge_winner()
             else:
-                QMessageBox.information(self, 'INFORMATION', 'Cannot Skip this Turn...\nYou Still Have Chance to Move')
+                QMessageBox.information(
+                    self,
+                    "INFORMATION",
+                    "Cannot Skip this Turn...\nYou Still Have Chance to Move",
+                )
 
     def AI_draw(self, i, j, total_time):
         if i != -999 and j != -999:
-            self.text.setText('In this turn:\n'
-                              f'total time for AI\'s decision is {total_time[0]}s\n'
-                              f'select time for AI\'s decision is {total_time[1]}s\n'
-                              f'simulate time for AI\'s decision is {total_time[2]}s\n'
-                              f'propagate time for AI \'sdecision is {total_time[3]}s\n')
+            self.text.setText(
+                "In this turn:\n"
+                f"total time for AI's decision is {total_time[0]}s\n"
+                f"select time for AI's decision is {total_time[1]}s\n"
+                f"simulate time for AI's decision is {total_time[2]}s\n"
+                f"propagate time for AI 'sdecision is {total_time[3]}s\n"
+            )
             # AI做出决策后，显示AI落子，get logic chessboard and update UI chessboard
             self.chessboard.put_piece(i, j, WHITE)
             self.x, self.y = self.coordinate_transform_map2pixel(i, j)
@@ -193,9 +210,9 @@ class FlipChess(QWidget):
             self.piece_now = BLACK
             self.judge_winner()
         else:
-            self.text.setText('')
-            self.text.setText('AI skips this turn...')
-            QMessageBox.information(self, 'INFORMATION', 'AI Skips this Turn...')
+            self.text.setText("")
+            self.text.setText("AI skips this turn...")
+            QMessageBox.information(self, "INFORMATION", "AI Skips this Turn...")
             self.ai_down = True
             self.mouse_point.setPixmap(self.black)
             self.piece_now = BLACK
@@ -233,11 +250,11 @@ class FlipChess(QWidget):
 
     def coordinate_transform_map2pixel(self, i, j):
         # 从 chessMap 里的逻辑坐标到 UI 上的绘制坐标的转换
-        return MARGIN + j * GRID - PIECE / 2, MARGIN + i * GRID - PIECE / 2
+        return j * GRID + 2, i * GRID + 2
 
     def coordinate_transform_pixel2map(self, x, y):
         # 从 UI 上的绘制坐标到 chessMap 里的逻辑坐标的转换
-        i, j = int(round((y - MARGIN) / GRID)), int(round((x - MARGIN) / GRID))
+        i, j = int(y / GRID), int(x / GRID)
         # 有MAGIN, 排除边缘位置导致 i,j 越界
         if i < 0 or i >= 8 or j < 0 or j >= 8:
             return None, None
@@ -286,7 +303,7 @@ class FlipChess(QWidget):
             self.update_UI_chessboard()
             self.ai_down = True
             self.piece_now = BLACK
-            self.text.setText('')
+            self.text.setText("")
             self.mouse_point.setPixmap(self.black)
             self.update()
         else:
