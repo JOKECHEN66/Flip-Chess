@@ -1,10 +1,10 @@
 # coding: utf-8
 import time
 
+DRAW = -1
 EMPTY = 0
 BLACK = 1
 WHITE = 2
-
 
 class Board:
     def __init__(self):
@@ -165,7 +165,20 @@ class Board:
             else:
                 return BLACK, abs(count_O - count_X)
         else:
-            return "D", 0
+            return DRAW, 0
+
+    def get_corner_number(self, chess_piece):
+        count = 0
+        if self._board[0][0] == chess_piece:
+            count += 1
+        if self._board[7][7] == chess_piece:
+            count += 1
+        if self._board[0][7] == chess_piece:
+            count += 1
+        if self._board[7][0] == chess_piece:
+            count += 1
+
+        return count
 
     def get_xy_on_logic_state(self, x, y):
         return self._board[x][y]

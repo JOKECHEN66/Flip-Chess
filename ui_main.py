@@ -1,11 +1,12 @@
 # encoding: utf-8
+import time
 from email.policy import default
 from select import select
 from turtle import update
 from Flip_Chess.Board import Board
 
 WIDTH = 540
-HEIGHT = 540
+HEIGHT = 640
 MARGIN = 30
 GRID = (WIDTH - 2 * MARGIN) / (8 - 1)
 PIECE = 60
@@ -17,6 +18,7 @@ WHITE = 2
 import sys
 from PyQt5 import QtCore, QtGui
 import logging
+from PyQt5.QtWidgets import QGridLayout, QFormLayout, QTextEdit
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QIcon, QPalette, QPainter
@@ -24,18 +26,21 @@ from Flip_Chess.MCTS import Monte_Carlo_Tree_Search
 
 
 class MCTS_AI(QtCore.QThread):
-    finishSignal = QtCore.pyqtSignal(int, int)
+    finishSignal = QtCore.pyqtSignal(int, int, list)
 
-    def __init__(self, chessboard, parent=None):
+    def __init__(self, chessboard, SCALAR, MAX_DEPTH, WEIGHT, parent=None):
         super(MCTS_AI, self).__init__(parent)
         self.chessboard = chessboard
+        self.SCALAR = SCALAR
+        self.MAX_DEPTH = MAX_DEPTH
+        self.WEIGHT = WEIGHT
 
     def run(self):
-        self.MCTS = Monte_Carlo_Tree_Search("MCTS_AI", WHITE)
-        strategy = self.MCTS(self.chessboard)
+        self.MCTS = Monte_Carlo_Tree_Search("MCTS_AI", WHITE, self.SCALAR, self.MAX_DEPTH, self.WEIGHT)
+        strategy, total_time = self.MCTS(self.chessboard)
         i, j = strategy[0], strategy[1]
         logging.debug(f"MCTS_AI put piece at {i} {j}")
-        self.finishSignal.emit(i, j)
+        self.finishSignal.emit(i, j, total_time)
 
 
 class LaBel(QLabel):
@@ -52,6 +57,9 @@ class FlipChess(QWidget):
         super().__init__()
         self.args = args
         self.initUI()
+        # 记录无效落子次数
+        self.black_count = 0
+        self.white_count = 0
 
     def initUI(self):
         LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
@@ -66,12 +74,14 @@ class FlipChess(QWidget):
         self.setPalette(palette1)
         self.setCursor(Qt.PointingHandCursor)
 
-        self.resize(WIDTH, HEIGHT)  # 固定大小 540*540
+        self.resize(WIDTH, HEIGHT)  # 固定大小 540 * 590
         self.setMinimumSize(QtCore.QSize(WIDTH, HEIGHT))
         self.setMaximumSize(QtCore.QSize(WIDTH, HEIGHT))
 
-        self.setWindowTitle("FlipChess")
-        self.setWindowIcon(QIcon("img/black.png"))
+        self.text = QTextEdit('Waiting AI to move...', self)
+        self.text.resize(540, 100)
+        self.text.move(0, 541)
+        self.text.setReadOnly(True)
 
         self.black = QPixmap("img/black.png")
         self.white = QPixmap("img/white.png")
@@ -107,7 +117,7 @@ class FlipChess(QWidget):
     def mouseMoveEvent(self, e):  # 黑色棋子随鼠标移动
         self.mouse_point.move(e.x() - 32, e.y() - 32)
 
-    def mousePressEvent(self, e):  # 玩家下棋
+    def mousePressEvent(self, e, count=0):  # 玩家下棋
         if e.button() == Qt.LeftButton and self.ai_down == True:
             x, y = e.x(), e.y()
             i, j = self.coordinate_transform_pixel2map(x, y)
@@ -116,8 +126,25 @@ class FlipChess(QWidget):
                 if piece_state == EMPTY:
                     # 棋子落在空白处才进行反应，传入到chessboard进行处理，然后刷新GUI棋盘
                     can_put_piece = self.chessboard.put_piece(i, j, self.piece_now)
-                    self.judge_winner()
-                    if can_put_piece == 0:
+                    if can_put_piece == -1:
+                        QMessageBox.warning(self, 'WARNING', 'Invalid Place to Put!')
+                        if self.piece_now == BLACK:
+                            self.black_count += 1
+                            count = self.black_count
+                        else:
+                            self.white_count += 1
+                            count = self.white_count
+                        # 三次无效落子判负
+                        if count == 3:
+                            self.black_count, self.white_count = 0, 0
+                            winner = BLACK if self.piece_now == WHITE else WHITE
+                            self.gameover(winner)
+                    elif can_put_piece == 0:
+                        # 清除当前的无效落子计数
+                        if self.piece_now == BLACK:
+                            self.black_count = 0
+                        else:
+                            self.white_count = 0
                         self.update_UI_chessboard()
                         # 落子完毕后，当前棋子取反
                         self.piece_now = BLACK if self.piece_now == WHITE else WHITE
@@ -127,20 +154,50 @@ class FlipChess(QWidget):
                         if self.args.mode == "PVE":
                             # PVE时玩家先下，MCTS_AI是white
                             self.ai_down = False
-                            self.AI = MCTS_AI(self.chessboard)
+                            self.AI = MCTS_AI(self.chessboard, self.args.SCALAR, self.args.MAX_DEPTH, self.args.WEIGHT)
                             self.AI.finishSignal.connect(self.AI_draw)
                             self.AI.start()
+                        self.judge_winner()
+        elif e.button() == Qt.RightButton and self.ai_down == True:
+            if self.chessboard.judge_all_drops(self.piece_now) == []:
+                QMessageBox.information(self, 'INFORMATION', 'You Skip this Turn...')
+                self.piece_now = BLACK if self.piece_now == WHITE else WHITE
+                self.mouse_point.setPixmap(
+                    self.black if self.piece_now == BLACK else self.white
+                )
+                if self.args.mode == "PVE":
+                    # PVE时玩家先下，MCTS_AI是white
+                    self.ai_down = False
+                    self.AI = MCTS_AI(self.chessboard, self.args.SCALAR, self.args.MAX_DEPTH, self.args.WEIGHT)
+                    self.AI.finishSignal.connect(self.AI_draw)
+                    self.AI.start()
+                self.judge_winner()
+            else:
+                QMessageBox.information(self, 'INFORMATION', 'Cannot Skip this Turn...\nYou Still Have Chance to Move')
 
-    def AI_draw(self, i, j):
-        # AI做出决策后，显示AI落子，get logic chessboard and update UI chessboard
-        self.chessboard.put_piece(i, j, WHITE)
-        self.judge_winner()
-        self.x, self.y = self.coordinate_transform_map2pixel(i, j)
-        self.ai_down = True
-        self.update()
-        self.update_UI_chessboard()
-        self.mouse_point.setPixmap(self.black)
-        self.piece_now = BLACK
+    def AI_draw(self, i, j, total_time):
+        if i != -999 and j != -999:
+            self.text.setText('In this turn:\n'
+                              f'total time for AI\'s decision is {total_time[0]}s\n'
+                              f'select time for AI\'s decision is {total_time[1]}s\n'
+                              f'simulate time for AI\'s decision is {total_time[2]}s\n'
+                              f'propagate time for AI \'sdecision is {total_time[3]}s\n')
+            # AI做出决策后，显示AI落子，get logic chessboard and update UI chessboard
+            self.chessboard.put_piece(i, j, WHITE)
+            self.x, self.y = self.coordinate_transform_map2pixel(i, j)
+            self.ai_down = True
+            self.update()
+            self.update_UI_chessboard()
+            self.mouse_point.setPixmap(self.black)
+            self.piece_now = BLACK
+            self.judge_winner()
+        else:
+            self.text.setText('')
+            self.text.setText('AI skips this turn...')
+            QMessageBox.information(self, 'INFORMATION', 'AI Skips this Turn...')
+            self.ai_down = True
+            self.mouse_point.setPixmap(self.black)
+            self.piece_now = BLACK
 
     def update_UI_chessboard(self):
         logic_chessboard = self.chessboard.get_logic_board()
@@ -193,6 +250,7 @@ class FlipChess(QWidget):
             self.gameover(winner)
 
     def gameover(self, winner):
+        time.sleep(1)
         logging.info("Game over")
         if winner == BLACK:
             reply = QMessageBox.question(
@@ -202,11 +260,19 @@ class FlipChess(QWidget):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
-        else:
+        elif winner == WHITE:
             reply = QMessageBox.question(
                 self,
-                "Winner is white player",
-                "Continue?",
+                "Flip chess",
+                "Winner is white player!\nContinue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+        elif winner == DRAW:
+            reply = QMessageBox.question(
+                self,
+                "Flip chess",
+                "Draw!\nContinue?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -219,6 +285,7 @@ class FlipChess(QWidget):
             self.update_UI_chessboard()
             self.ai_down = True
             self.piece_now = BLACK
+            self.text.setText('')
             self.mouse_point.setPixmap(self.black)
             self.update()
         else:
@@ -229,8 +296,10 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", type=str, choices=["PVP", "PVE"], default="PVP")
-    parser.add_argument("--MCTS_SCALAR", type=int)
+    parser.add_argument("--mode", "-m", type=str, choices=["PVP", "PVE"], default="PVE")
+    parser.add_argument("--SCALAR", "-s", type=int, default=2)
+    parser.add_argument("--MAX_DEPTH", "-md", type=int, default=150)
+    parser.add_argument("--WEIGHT", "-w", type=int, default=10)
     args = parser.parse_args()
     app = QApplication(sys.argv)
     ex = FlipChess(args)
